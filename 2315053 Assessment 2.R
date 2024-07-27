@@ -6,7 +6,8 @@ Weather_data <- read.csv("Weather Research & Forecasting Dataset 2018.csv", head
 
 View(Weather_data)
 
-#install packages
+#install packages 
+
 install.packages("tidyverse")
 install.packages("dplyr")
 install.packages("ggplot2") # for visualisation

@@ -1,0 +1,153 @@
+---
+title: "Scarcliffe Weather Data"
+author: "Ismail Olatunji - 2315053"
+date: "2024-05-13"
+output: html_document
+---
+
+### I will be loading my raw dataset into R to begin my analysis
+```{r}
+getwd()
+setwd("C:/Users/user/OneDrive/Documents/DAT7006/ASS 2")
+
+# Read the CSV file and skip the first row
+Weather_data <- read.csv("Weather Research & Forecasting Dataset 2018.csv", header = FALSE, skip = 1)
+
+View(Weather_data)
+
+str(Weather_data)
+```
+```{r}
+
+#we set the column names as character and skipped first rol of the Weather_data
+colnames(Weather_data) <- as.character(unlist(Weather_data[1, ]))
+Weather_data <- Weather_data[-1, ]
+
+View(Weather_data)
+
+#made a subset where XLAT == 53.227 & XLONG == -1.224
+Scarcliffe_data <- subset(Weather_data, XLAT == 53.227 & XLONG == -1.224)
+View(Scarcliffe_data)
+
+#I removed the first and second columns (XLAT & XLONG) in order to be able to split 
+#the columns to groups of 10 each as the first 10 columns are iterated all over for 
+#the remaining columns.
+
+ScarcliffeXX <- Scarcliffe_data[, -(1:2)]
+
+
+#Splitted Mansfield_columns dataframe into groups with 10 columns each
+Scarcliffe_columns <- split.default(ScarcliffeXX, rep(1:248, each = 10))
+Scarcliffe_columns
+
+
+#used lapply function combine the XLAT & XLONG columns back and naming each columns
+Scarcliffe_Join <- lapply(Scarcliffe_columns, function(x) {
+  Scarcliffe_bind <- cbind(Scarcliffe_data[, 1:2], x)
+  colnames(Scarcliffe_bind) <- c("XLAT", "XLONG", "TSK", "PSFC", "u10", "v10", "Q2", "RAINC", "RAINNC", "SNOW", "TSLB", "SMOIS")
+  
+  return(Scarcliffe_bind)
+})
+
+View(Scarcliffe_Join)
+
+#combine the lists of data frames into one single data frame
+Scarcliffemain_df <- do.call(rbind, Scarcliffe_Join)
+View(Scarcliffemain_df)
+
+#Let's generate the sequence of time stamps with 3-hour intervals
+# Define the start date and time using dmy_hms()
+start_date <- as.POSIXlt("01-05-2018 00:00:00", format = "%d-%m-%Y %H:%M:%S")
+
+nrows <- nrow(Scarcliffemain_df)
+View(nrows)
+
+# Create a sequence of timestamps with a 3-hour interval for additional rows
+timestamp_sequence <- seq(start_date, by = "3 hours", length.out = nrows)
+
+# extract the format, how we want it to be arranged
+timestamp <- format(timestamp_sequence, "%d-%m-%Y %H:%M:%S")
+
+Scarcliffemain_df$Datetime <- timestamp
+
+
+# View the resulting data frame
+View(Scarcliffemain_df)
+head(Scarcliffemain_df)
+tail(Scarcliffemain_df)
+
+str(Scarcliffemain_df)
+
+
+#data types - change each column to the right data type
+Scarcliffemain_df <- Scarcliffemain_df %>%
+  mutate_at(1:12, as.numeric)
+View(Scarcliffemain_df)
+
+#convert the Datetime column to date format
+Scarcliffemain_df$Datetime <- as.POSIXlt(Scarcliffemain_df$Datetime, format = "%d-%m-%Y %H:%M:%S")
+
+str(Scarcliffemain_df)
+View(Scarcliffemain_df)
+
+```
+```{r}
+#Check for missing values in the whole dataset
+is.na(Scarcliffemain_df)
+
+#check the number of NA we have in the whole dataset
+sum(is.na(Scarcliffemain_df))
+
+#gives us breakdown of NA in each columns
+colSums(is.na(Scarcliffemain_df))
+
+
+#I will create a dataframe of the na_values
+missing_values <- data.frame(
+  Columns = c("XLAT", "XLONG", "TSK", "PSFC", "u10", "v10", "Q2", "RAINC", "RAINNC", "SNOW", "TSLB", "SMOIS", "Datetime"),
+  na_count = c(0, 0, 6, 6, 7, 5, 8, 6, 8, 6, 6, 9, 0)
+)
+View(missing_values)
+
+# I filter out rows with 0 NA_count as they won't be needed
+missing_values1 <- missing_values[missing_values$na_count > 0, ]
+
+#view filtered dataframe after removing rows/values with 0
+View(missing_values1)
+
+#Below is the plot for our missing values on each column
+
+ggplot(data = missing_values1, aes(x = na_count, y = Columns)) + 
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "Chart of Missing Values per Column", 
+       x = "Missing Values", 
+       y = "Columns")
+
+
+#this will show us the percentage of missing values in each column
+vis_miss(Scarcliffemain_df)
+
+View(Scarcliffemain_df)  # this gives us overview of all our missing values
+
+
+# Let's handle all missing values column by column
+colSums(is.na(Scarcliffemain_df))
+
+
+#na.approx function will be used to interpolate NA values in each column
+Scarcliffemain_df1 <- Scarcliffemain_df %>%
+  mutate(across(c(TSK, PSFC, u10, v10, Q2, RAINC, RAINNC, SNOW, TSLB, SMOIS), na.approx))
+
+View(Scarcliffemain_df1)
+
+# Let's recheck to be sure we don't have missing values anymore
+# All missing values are now handled, which means we have no missing value anymore
+colSums(is.na(Scarcliffemain_df1))
+
+#let's recheck our missing values percentage again
+vis_miss(Scarcliffemain_df1)
+#the visualisation above shows that we don't have any missing value anymore
+
+```
+
+
