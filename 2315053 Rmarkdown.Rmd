@@ -1,0 +1,41 @@
+---
+title: "2315053 - Scarcliffe"
+author: "Ismail Olatunji - 2315053"
+date: "2024-05-14"
+output: html_document
+---
+
+
+```{r}
+"knitr chunk options, such as echo=TRUE"
+chooseCRANmirror(graphics = FALSE)
+install.packages("rmarkdown")
+install.packages("knitr")
+
+library(rmarkdown)
+library(knitr)
+```
+
+```{r}
+getwd()
+setwd("C:/Users/user/OneDrive/Documents/DAT7006/ASS 2")
+
+#Read the CSV file and skipp the first row
+Weather_data <- read.csv("Weather Research & Forecasting Dataset 2018.csv", header = FALSE, skip = 1)
+
+```
+
+```{r}
+count(Weather_data)
+
+#we set the column names as character and skipped first rol of the Weather_data
+colnames(Weather_data) <- as.character(unlist(Weather_data[1, ]))
+Weather_data <- Weather_data[-1, ]
+
+View(Weather_data)
+
+#made a subset where XLAT == 53.227 & XLONG == -1.224
+Scarcliffe_data <- subset(Weather_data, XLAT == 53.227 & XLONG == -1.224)
+View(Scarcliffe_data)
+```
+

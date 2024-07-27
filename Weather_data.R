@@ -1,0 +1,396 @@
+getwd()
+setwd("C:/Users/user/OneDrive/Documents/DAT7006/ASS 2")
+
+#Read the CSV file and skipp the first row
+Weather_data <- read.csv("Weather Research & Forecasting Dataset 2018.csv", header = FALSE, skip = 1)
+
+View(Weather_data)
+
+#install packages
+install.packages("tidyverse")
+install.packages("dplyr")
+install.packages("ggplot2") # for visualisation
+install.packages("naniar")  # missing value visualisation
+install.packages("zoo")
+install.packages("corrplot")
+
+
+#import packages
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(naniar)
+library(zoo)
+library(corrplot)
+
+glimpse(Weather_data)
+count(Weather_data)
+
+
+#we set the column names as character and skipped first rol of the Weather_data
+colnames(Weather_data) <- as.character(unlist(Weather_data[1, ]))
+Weather_data <- Weather_data[-1, ]
+
+View(Weather_data)
+
+#made a subset where XLAT == 53.227 & XLONG == -1.224
+Scarcliffe_data <- subset(Weather_data, XLAT == 53.227 & XLONG == -1.224)
+View(Scarcliffe_data)
+
+#I removed the first and second columns (XLAT & XLONG) in order to be able to split 
+#the columns to groups of 10 each as the first 10 columns are iterated all over for 
+#the remaining columns.
+
+ScarcliffeXX <- Scarcliffe_data[, -(1:2)]
+
+View(ScarcliffeXX)
+
+#Splitted Mansfield_columns dataframe into groups with 10 columns each
+Scarcliffe_columns <- split.default(ScarcliffeXX, rep(1:248, each = 10))
+
+View(Scarcliffe_columns)
+
+#used lapply function combine the XLAT & XLONG columns back and naming each columns
+Scarcliffe_Join <- lapply(Scarcliffe_columns, function(x) {
+  Scarcliffe_bind <- cbind(Scarcliffe_data[, 1:2], x)
+  colnames(Scarcliffe_bind) <- c("XLAT", "XLONG", "TSK", "PSFC", "u10", "v10", "Q2", "RAINC", "RAINNC", "SNOW", "TSLB", "SMOIS")
+  
+  return(Scarcliffe_bind)
+})
+
+View(Scarcliffe_Join)
+
+#combine the lists of data frames into one single data frame
+Scarcliffemain_df <- do.call(rbind, Scarcliffe_Join)
+View(Scarcliffemain_df)
+
+#Let's generate the sequence of time stamps with 3-hour intervals
+# Define the start date and time using dmy_hms()
+start_date <- as.POSIXlt("01-05-2018 00:00:00", format = "%d-%m-%Y %H:%M:%S")
+
+nrows <- nrow(Scarcliffemain_df)
+View(nrows)
+
+# Create a sequence of timestamps with a 3-hour interval for additional rows
+timestamp_sequence <- seq(start_date, by = "3 hours", length.out = nrows)
+
+# extract the format, how we want it to be arranged
+timestamp <- format(timestamp_sequence, "%d-%m-%Y %H:%M:%S")
+
+Scarcliffemain_df$Datetime <- timestamp
+
+
+# View the resulting data frame
+View(Scarcliffnew_df)
+head(Scarcliffemain_df)
+tail(Scarcliffemain_df)
+
+str(Scarcliffemain_df)
+
+
+#data types - change each column to the right data type
+Scarcliffemain_df <- Scarcliffemain_df %>%
+  mutate_at(1:12, as.numeric)
+View(Scarcliffemain_df)
+
+#convert the Datetime column to date format
+Scarcliffemain_df$Datetime <- as.POSIXlt(Scarcliffemain_df$Datetime, format = "%d-%m-%Y %H:%M:%S")
+
+str(Scarcliffemain_df)
+View(Scarcliffemain_df)
+
+
+#Check for missing values in the whole dataset
+is.na(Scarcliffemain_df)
+
+#check the number of NA we have in the whole dataset
+sum(is.na(Scarcliffemain_df))
+
+#gives us breakdown of NA in each columns
+colSums(is.na(Scarcliffemain_df))
+
+
+#I will create a dataframe of the na_values
+missing_values <- data.frame(
+  Columns = c("XLAT", "XLONG", "TSK", "PSFC", "u10", "v10", "Q2", "RAINC", "RAINNC", "SNOW", "TSLB", "SMOIS", "Datetime"),
+  na_count = c(0, 0, 6, 6, 7, 5, 8, 6, 8, 6, 6, 9, 0)
+)
+View(missing_values)
+
+# I filter out rows with 0 NA_count as they won't be needed
+missing_values1 <- missing_values[missing_values$na_count > 0, ]
+
+#view filtered dataframe after removing rows/values with 0
+View(missing_values1)
+
+#Below is the plot for our missing values on each column
+
+ggplot(data = missing_values1, aes(x = na_count, y = Columns)) + 
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "Chart of Missing Values per Column", 
+       x = "Missing Values", 
+       y = "Columns")
+
+
+#this will show us the percentage of missing values in each column
+vis_miss(Scarcliffemain_df)
+
+View(Scarcliffemain_df)  # this gives us overview of all our missing values
+
+
+# Let's handle all missing values column by column
+colSums(is.na(Scarcliffemain_df))
+
+
+#na.approx function will be used to interpolate NA values in each column
+Scarcliffemain_df1 <- Scarcliffemain_df %>%
+  mutate(across(c(TSK, PSFC, u10, v10, Q2, RAINC, RAINNC, SNOW, TSLB, SMOIS), na.approx))
+
+View(Scarcliffemain_df1)
+
+# Let's recheck to be sure we don't have missing values anymore
+# All missing values are now handled, which means we have no missing value anymore
+colSums(is.na(Scarcliffemain_df1))
+
+#let's recheck our missing values percentage again
+vis_miss(Scarcliffemain_df1)
+#the visualisation above shows that we don't have any missing value anymore
+
+
+# Calculate wind speed using the Pythagorean theorem, I will use mutate function to create a new
+#column "Windspeed"
+
+Scarcliffemain_df1 <- Scarcliffemain_df1 %>%
+  mutate(Windspeed = sqrt(u10^2 + v10^2))
+View(Scarcliffemain_df1)
+
+
+# I will be dropping (u10, v10, RAINNC, SNOW, TSLB SMOIS) columns, they are not 
+#needed for my analysis
+
+Scarcliffenew_df <- Scarcliffemain_df1 %>%
+  select(-u10, -v10, -RAINNC, -SNOW, -SMOIS)
+
+View(Scarcliffenew_df)
+# We are now left with 8 columns, XLAT, XLONG, TSK, PSFC, Q2, RAINC, Datetime, Windspeed
+
+## I will be doing conversion of some parametres to common UK standard
+
+Scarcliffenew_df <- Scarcliffenew_df %>%
+  mutate(TSK = TSK - 273.15,         # conversion of TSK from Kelvin to Celsius
+         TSLB = TSLB - 273.15,       # conversion of TSLB from Kelvin to Celsius
+         PSFC = PSFC / 100,          # conversion of PSFC from Pascal to hPa
+         Q2 = Q2 * 1000)             # conversion of Q2 from kg/kg to g/kg
+
+View(Scarcliffenew_df)
+
+
+### What we need to do next is to detect outliers and handle them appropriately
+
+## 1. detecting outliers in TSK column using IQR
+
+quantile(Scarcliffenew_df$TSK)
+summary(Scarcliffenew_df$TSK)
+TSK_IQR <- IQR(Scarcliffenew_df$TSK) #this is simply Q3 - Q1, Q3 = 19.175 and Q1 = 8.725
+TSK_IQR
+
+#Q3 <- quantile(Scarcliffenew_df$TSK, 0.75)
+#Q1 <- quantile(Scarcliffenew_df$TSK, 0.25)
+
+#let's get our upper and lower bounds in TSK column
+upper_bound <- quantile(Scarcliffenew_df$TSK, 0.75) + 1.5 * TSK_IQR
+upper_bound # upper bound is 34.85 which means, any figure above this is an outlier
+
+lower_bound <- quantile(Scarcliffenew_df$TSK, 0.25) - 1.5 * TSK_IQR
+lower_bound # lower bound is -6.95, any value below the lower bound is an outlier
+
+# Remove outliers
+TSK_outliers <- Scarcliffenew_df[Scarcliffenew_df$TSK < lower_bound | Scarcliffenew_df$TSK > upper_bound]
+print(TSK_outliers)
+
+boxplot(Scarcliffenew_df$TSK, main = "TSK Boxplot with Outliers")
+
+''' From the IQR detection method and the boxplot visualisation, it is clear that TSK column has no outlier
+So, I will have to repeat the above steps for the remaining columns'''
+
+
+
+## 2. Detecting and handling of outliers in PSFC column using Tukey's Fences method
+
+PSFC_outliers <- boxplot.stats(Scarcliffenew_df$PSFC)$out
+print(PSFC_outliers)
+
+boxplot(Scarcliffenew_df$PSFC, main = "PSFC Boxplot with Outliers")
+''' from the visualisation, it is clear we have 5 outliers in PSFC Column
+which 989.54 987.48 985.84 986.93 989.90'''
+
+
+
+##  3. Detecting and handling outliers in Q2 column
+
+Q2_outliers <- boxplot.stats(Scarcliffenew_df$Q2)$out
+print(Q2_outliers)
+
+boxplot(Scarcliffemain_df1$Q2, main = "Boxplot Visualisation of Q2 Column")
+# No outliers detected in Q2 Column
+
+
+
+##  4. Detecting and handling outliers in RAINC column
+
+RAINC_outliers <- boxplot.stats(Scarcliffenew_df$RAINC)$out
+print(RAINC_outliers)
+
+# Histogram of RAINC values
+hist(Scarcliffemain_df1$RAINC, main = "Histogram of Convective Rain (Accumulated)", xlab = "Rainfall in mm", col = "blue")
+
+''' Leaving the outliers in order to ensure that the analysis reflects the true 
+#variability in rainfall patterns.'''
+
+
+
+## 5. Detecting and handling outliers in TSLB column
+
+TSLB_outliers <- boxplot.stats(Scarcliffenew_df$TSLB)$out
+print(TSLB_outliers)
+
+hist(Scarcliffemain_df1$TSLB, main = "Histogram of Soil Temperature Q2", xlab = "Soil Temperature in Celsius", col = "yellow")
+
+
+##   6. Detecting and handling outliers in Windspeed column
+
+Windspeed_outliers <- boxplot.stats(Scarcliffenew_df$Windspeed)$out
+print(Windspeed_outliers)   
+
+# my outliers here are 8.570298 8.174350 9.213577 9.374433, but I will not be dropping any of them
+
+boxplot(Scarcliffenew_df$Windspeed)
+
+'''So after getting outliers in some columns, I decided not to remove them because they
+#are true outliers; natural variations.They are genuine observations and very vital'''
+
+View(Scarcliffenew_df)
+
+
+## I will be showing Statistical analysis now
+
+# UNIVARIATE ANALYSIS
+
+# Univariate analysis of Convective rain (Accumulated precipitation) - RAINC
+
+# Summary function in R will give us the basic descriptive statistical analysis in R such as
+ the minimum value, 1st quartile, Mean, Median, £rd quartile and the Maximum number, the code below will show us that:
+summary(Scarcliffenew_df$RAINC)
+
+# this code does not give us Mode, so alternatively we can use another method to get that by installing "DescTools" library
+ 
+install.packages("DescTools")
+library(DescTools)
+
+# Now, let us find our Mode for RAINC column
+
+mode <- Mode(Scarcliffenew_df$RAINC)
+mode
+
+# from the code above, we deduce that 0 is the Mode and its frequency is 227 times
+
+# another statistical analysis we need to find is standard deviation
+
+sd <- sd(Scarcliffenew_df$RAINC)
+sd
+
+# our standard deviation is 0.1590342
+
+ggplot(data = Scarcliffenew_df, aes(x = RAINC)) +
+  geom_histogram(fill = "blue", color = "black") +
+  labs(title = "Histogram: Accumulated Precipitation",
+       x = "Accumulated Precipitation (mm)",
+       y = "Frequency")
+
+hist(Scarcliffenew_df$RAINC, 
+     main = "Distribution of Rainfall in Scarcliffe, Derbyshire",
+     xlab = "Rainfall (mm)", ylab = "Frequency")
+
+'''The histogram shows a highly skewed distribution with a significant peak at 0.0 mm, 
+indicating that the most frequent observation is no precipitation. There are a few 
+smaller bars to the right, showing that there are fewer occurrences of higher precipitation 
+values. This distribution suggests that over the period or area studied, dry conditions 
+are much more common than wet conditions. The shape of the distribution, heavily skewed 
+with a long tail to the right, is typical for precipitation data, where many dry days 
+and a few very wet days are common.'''
+
+
+# BIRAVARIATE ANALYSIS
+
+# Let's explore the relationship between temperature and Soil Temperature in Scarcliffe, Derbyshire, by plotting a scatter plot.
+
+# Scatter plot
+
+plot(Scarcliffenew_df$TSK, Scarcliffenew_df$TSLB,
+     xlab = "Temperature (°C)", ylab = "Soil Temperature (°C)",
+     main = "Temperature vs. Soil Temperature in Scarcliffe, Derbyshire")
+
+
+ggplot(data = Scarcliffenew_df, aes(x = TSK, y = TSLB)) +
+  geom_point(size = 2) +
+  labs(x = "Surface Temperature (°C)", y = "Soil Temperature (°C)", title = " Temperature Vs. Soil Temperature")
+
+
+
+
+
+
+
+
+# Correlation analysis
+correlation_matrix <- cor(Scarcliffenew_df[c("TSK", "PSFC", "RAINC", "Q2", "Windspeed")])
+View(correlation_matrix)
+
+# Visualize correlation matrix
+corrplot(correlation_matrix, method = "color")
+
+# Hypothesis testing (if applicable)
+# Example: t-test to compare temperature means between two seasons
+t.test(Mansfieldnew_df$TSK ~ Mansfieldnew_df$RAINC)
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+Mansfieldmain_df1 %>%
+  slice_max(n = 5, PSFC)
+
+Mansfieldmain_df1 %>%
+  slice_min(n = 5, PSFC)
+
+
+
+
+
+
+plot(Mansfieldmain_df1$PSFC, Mansfieldmain_df1$Windspeed,
+     main = "SURFACE PRESSURE VS WINDSPEED",
+     xlab = "SURFACE PRESSURE (PSFC)",
+     ylab = "WINDSPEED")
+
+
+plot(Mansfieldmain_df1$TSK, Mansfieldmain_df1$Windspeed,
+     main = "SURFACE TEMP VS WINDSPEED",
+     xlab = "TEMP (TSK)",
+     ylab = "WINDSPEED")
+
+
+plot(Mansfieldmain_df1$RAINC, Mansfieldmain_df1$TSK,
+     main = "precipitation vs SURFACE TEMP")
+correlation <- cor(Mansfieldmain_df1$RAINC, Mansfieldmain_df1$TSK, method="pearson")
+print(correlation)
+model <- lm(RAINC ~ TSK, data=Mansfieldmain_df1)
+summary(model)
